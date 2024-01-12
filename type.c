@@ -1,24 +1,24 @@
 #include "chibicc.h"
 
-Type *ty_void = &(Type){TY_VOID, 1, 1};
-Type *ty_bool = &(Type){TY_BOOL, 1, 1};
+Type ty_void_ = {TY_VOID, 1, 1}, *ty_void = &ty_void_;
+Type ty_bool_ = {TY_BOOL, 1, 1}, *ty_bool = &ty_bool_;
 
-Type *ty_char = &(Type){TY_CHAR, 1, 1};
-Type *ty_short = &(Type){TY_SHORT, 2, 2};
-Type *ty_int = &(Type){TY_INT, 4, 4};
-Type *ty_long = &(Type){TY_LONG, 8, 8};
+Type ty_char_ = {TY_CHAR, 1, 1}, *ty_char = &ty_char_;
+Type ty_short_ = {TY_SHORT, 2, 2}, *ty_short = &ty_short_;
+Type ty_int_ = {TY_INT, 4, 4}, *ty_int = &ty_int_;
+Type ty_long_ = {TY_LONG, 8, 8}, *ty_long = &ty_long_;
 
-Type *ty_uchar = &(Type){TY_CHAR, 1, 1, true};
-Type *ty_ushort = &(Type){TY_SHORT, 2, 2, true};
-Type *ty_uint = &(Type){TY_INT, 4, 4, true};
-Type *ty_ulong = &(Type){TY_LONG, 8, 8, true};
+Type ty_uchar_ = {TY_CHAR, 1, 1, true}, *ty_uchar = &ty_uchar_;
+Type ty_ushort_ = {TY_SHORT, 2, 2, true}, *ty_ushort = &ty_ushort_;
+Type ty_uint_ = {TY_INT, 4, 4, true}, *ty_uint = &ty_uint_;
+Type ty_ulong_ = {TY_LONG, 8, 8, true}, *ty_ulong = &ty_ulong_;
 
-Type *ty_float = &(Type){TY_FLOAT, 4, 4};
-Type *ty_double = &(Type){TY_DOUBLE, 8, 8};
-Type *ty_ldouble = &(Type){TY_LDOUBLE, 16, 16};
+Type ty_float_ = {TY_FLOAT, 4, 4}, *ty_float = &ty_float_;
+Type ty_double_ = {TY_DOUBLE, 8, 8}, *ty_double = &ty_double_;
+Type ty_ldouble_ = {TY_LDOUBLE, 16, 16}, *ty_ldouble = &ty_ldouble_;
 
 static Type *new_type(TypeKind kind, int size, int align) {
-  Type *ty = calloc(1, sizeof(Type));
+  Type *ty = (Type *) calloc(1, sizeof(Type));
   ty->kind = kind;
   ty->size = size;
   ty->align = align;
@@ -88,7 +88,7 @@ bool is_compatible(Type *t1, Type *t2) {
 }
 
 Type *copy_type(Type *ty) {
-  Type *ret = calloc(1, sizeof(Type));
+  Type *ret = (Type *) calloc(1, sizeof(Type));
   *ret = *ty;
   ret->origin = ty;
   return ret;

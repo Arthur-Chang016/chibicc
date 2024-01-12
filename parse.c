@@ -87,7 +87,9 @@ static Obj *locals;
 // Likewise, global variables are accumulated to this list.
 static Obj *globals;
 
-static Scope *scope = &(Scope){};
+// static Scope *scope = &(Scope){};
+static Scope global_scope;
+static Scope *scope = &global_scope;
 
 // Points to the function object the parser is currently parsing.
 static Obj *current_fn;
@@ -108,7 +110,7 @@ static Obj *builtin_alloca;
 
 static bool is_typename(Token *tok);
 static Type *declspec(Token **rest, Token *tok, VarAttr *attr);
-static Type *typename(Token **rest, Token *tok);
+static Type *typename_(Token **rest, Token *tok);
 static Type *enum_specifier(Token **rest, Token *tok);
 static Type *typeof_specifier(Token **rest, Token *tok);
 static Type *type_suffix(Token **rest, Token *tok, Type *ty);
@@ -133,9 +135,9 @@ static Node *logor(Token **rest, Token *tok);
 static double eval_double(Node *node);
 static Node *conditional(Token **rest, Token *tok);
 static Node *logand(Token **rest, Token *tok);
-static Node *bitor(Token **rest, Token *tok);
+static Node *bitor_(Token **rest, Token *tok);
 static Node *bitxor(Token **rest, Token *tok);
-static Node *bitand(Token **rest, Token *tok);
+static Node *bitand_(Token **rest, Token *tok);
 static Node *equality(Token **rest, Token *tok);
 static Node *relational(Token **rest, Token *tok);
 static Node *shift(Token **rest, Token *tok);
@@ -161,7 +163,7 @@ static int align_down(int n, int align) {
 }
 
 static void enter_scope(void) {
-  Scope *sc = calloc(1, sizeof(Scope));
+  Scope *sc = (Scope*) calloc(1, sizeof(Scope));
   sc->next = scope;
   scope = sc;
 }
@@ -173,7 +175,7 @@ static void leave_scope(void) {
 // Find a variable by name.
 static VarScope *find_var(Token *tok) {
   for (Scope *sc = scope; sc; sc = sc->next) {
-    VarScope *sc2 = hashmap_get2(&sc->vars, tok->loc, tok->len);
+    VarScope *sc2 = (VarScope *) hashmap_get2(&sc->vars, tok->loc, tok->len);
     if (sc2)
       return sc2;
   }
@@ -182,7 +184,7 @@ static VarScope *find_var(Token *tok) {
 
 static Type *find_tag(Token *tok) {
   for (Scope *sc = scope; sc; sc = sc->next) {
-    Type *ty = hashmap_get2(&sc->tags, tok->loc, tok->len);
+    Type *ty = (Type *) hashmap_get2(&sc->tags, tok->loc, tok->len);
     if (ty)
       return ty;
   }
@@ -190,7 +192,7 @@ static Type *find_tag(Token *tok) {
 }
 
 static Node *new_node(NodeKind kind, Token *tok) {
-  Node *node = calloc(1, sizeof(Node));
+  Node *node = (Node*) calloc(1, sizeof(Node));
   node->kind = kind;
   node->tok = tok;
   return node;
@@ -244,7 +246,7 @@ static Node *new_vla_ptr(Obj *var, Token *tok) {
 Node *new_cast(Node *expr, Type *ty) {
   add_type(expr);
 
-  Node *node = calloc(1, sizeof(Node));
+  Node *node = (Node*) calloc(1, sizeof(Node));
   node->kind = ND_CAST;
   node->tok = expr->tok;
   node->lhs = expr;
@@ -253,13 +255,13 @@ Node *new_cast(Node *expr, Type *ty) {
 }
 
 static VarScope *push_scope(char *name) {
-  VarScope *sc = calloc(1, sizeof(VarScope));
+  VarScope *sc = (VarScope *) calloc(1, sizeof(VarScope));
   hashmap_put(&scope->vars, name, sc);
   return sc;
 }
 
 static Initializer *new_initializer(Type *ty, bool is_flexible) {
-  Initializer *init = calloc(1, sizeof(Initializer));
+  Initializer *init = (Initializer *) calloc(1, sizeof(Initializer));
   init->ty = ty;
 
   if (ty->kind == TY_ARRAY) {
@@ -268,7 +270,7 @@ static Initializer *new_initializer(Type *ty, bool is_flexible) {
       return init;
     }
 
-    init->children = calloc(ty->array_len, sizeof(Initializer *));
+    init->children = (Initializer **) calloc(ty->array_len, sizeof(Initializer *));
     for (int i = 0; i < ty->array_len; i++)
       init->children[i] = new_initializer(ty->base, false);
     return init;
@@ -280,11 +282,11 @@ static Initializer *new_initializer(Type *ty, bool is_flexible) {
     for (Member *mem = ty->members; mem; mem = mem->next)
       len++;
 
-    init->children = calloc(len, sizeof(Initializer *));
+    init->children = (Initializer **) calloc(len, sizeof(Initializer *));
 
     for (Member *mem = ty->members; mem; mem = mem->next) {
       if (is_flexible && ty->is_flexible && !mem->next) {
-        Initializer *child = calloc(1, sizeof(Initializer));
+        Initializer *child = (Initializer *) calloc(1, sizeof(Initializer));
         child->ty = mem->ty;
         child->is_flexible = true;
         init->children[mem->idx] = child;
@@ -299,7 +301,7 @@ static Initializer *new_initializer(Type *ty, bool is_flexible) {
 }
 
 static Obj *new_var(char *name, Type *ty) {
-  Obj *var = calloc(1, sizeof(Obj));
+  Obj *var = (Obj*) calloc(1, sizeof(Obj));
   var->name = name;
   var->ty = ty;
   var->align = ty->align;
@@ -437,7 +439,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     if (equal(tok, "_Atomic")) {
       tok = tok->next;
       if (equal(tok , "(")) {
-        ty = typename(&tok, tok->next);
+        ty = typename_(&tok, tok->next);
         tok = skip(tok, ")");
       }
       is_atomic = true;
@@ -450,7 +452,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
       tok = skip(tok->next, "(");
 
       if (is_typename(tok))
-        attr->align = typename(&tok, tok)->align;
+        attr->align = typename_(&tok, tok)->align;
       else
         attr->align = const_expr(&tok, tok);
       tok = skip(tok, ")");
@@ -721,7 +723,7 @@ static Type *abstract_declarator(Token **rest, Token *tok, Type *ty) {
 }
 
 // type-name = declspec abstract-declarator
-static Type *typename(Token **rest, Token *tok) {
+static Type *typename_(Token **rest, Token *tok) {
   Type *ty = declspec(&tok, tok, NULL);
   return abstract_declarator(rest, tok, ty);
 }
@@ -799,7 +801,7 @@ static Type *typeof_specifier(Token **rest, Token *tok) {
 
   Type *ty;
   if (is_typename(tok)) {
-    ty = typename(&tok, tok);
+    ty = typename_(&tok, tok);
   } else {
     Node *node = expr(&tok, tok);
     add_type(node);
@@ -1283,7 +1285,7 @@ static Type *copy_struct_type(Type *ty) {
   Member head = {};
   Member *cur = &head;
   for (Member *mem = ty->members; mem; mem = mem->next) {
-    Member *m = calloc(1, sizeof(Member));
+    Member *m = (Member *) calloc(1, sizeof(Member));
     *m = *mem;
     cur = cur->next = m;
   }
@@ -1471,7 +1473,7 @@ write_gvar_data(Relocation *cur, Initializer *init, Type *ty, char *buf, int off
     return cur;
   }
 
-  Relocation *rel = calloc(1, sizeof(Relocation));
+  Relocation *rel = (Relocation *) calloc(1, sizeof(Relocation));
   rel->offset = offset;
   rel->label = label;
   rel->addend = val;
@@ -1487,7 +1489,7 @@ static void gvar_initializer(Token **rest, Token *tok, Obj *var) {
   Initializer *init = initializer(rest, tok, var->ty, &var->ty);
 
   Relocation head = {};
-  char *buf = calloc(1, var->ty->size);
+  char *buf = (char*) calloc(1, var->ty->size);
   write_gvar_data(&head, init, var->ty, buf, 0);
   var->init_data = buf;
   var->rel = head.next;
@@ -2075,7 +2077,7 @@ static Node *to_assign(Node *binary) {
     Obj *addr = new_lvar("", pointer_to(binary->lhs->ty));
     Obj *val = new_lvar("", binary->rhs->ty);
     Obj *old = new_lvar("", binary->lhs->ty);
-    Obj *new = new_lvar("", binary->lhs->ty);
+    Obj *new_ = new_lvar("", binary->lhs->ty);
 
     cur = cur->next =
       new_unary(ND_EXPR_STMT,
@@ -2099,7 +2101,7 @@ static Node *to_assign(Node *binary) {
     loop->cont_label = new_unique_name();
 
     Node *body = new_binary(ND_ASSIGN,
-                            new_var_node(new, tok),
+                            new_var_node(new_, tok),
                             new_binary(binary->kind, new_var_node(old, tok),
                                        new_var_node(val, tok), tok),
                             tok);
@@ -2110,11 +2112,11 @@ static Node *to_assign(Node *binary) {
     Node *cas = new_node(ND_CAS, tok);
     cas->cas_addr = new_var_node(addr, tok);
     cas->cas_old = new_unary(ND_ADDR, new_var_node(old, tok), tok);
-    cas->cas_new = new_var_node(new, tok);
+    cas->cas_new = new_var_node(new_, tok);
     loop->cond = new_unary(ND_NOT, cas, tok);
 
     cur = cur->next = loop;
-    cur = cur->next = new_unary(ND_EXPR_STMT, new_var_node(new, tok), tok);
+    cur = cur->next = new_unary(ND_EXPR_STMT, new_var_node(new_, tok), tok);
 
     Node *node = new_node(ND_STMT_EXPR, tok);
     node->body = head.next;
@@ -2224,17 +2226,17 @@ static Node *logor(Token **rest, Token *tok) {
 
 // logand = bitor ("&&" bitor)*
 static Node *logand(Token **rest, Token *tok) {
-  Node *node = bitor(&tok, tok);
+  Node *node = bitor_(&tok, tok);
   while (equal(tok, "&&")) {
     Token *start = tok;
-    node = new_binary(ND_LOGAND, node, bitor(&tok, tok->next), start);
+    node = new_binary(ND_LOGAND, node, bitor_(&tok, tok->next), start);
   }
   *rest = tok;
   return node;
 }
 
 // bitor = bitxor ("|" bitxor)*
-static Node *bitor(Token **rest, Token *tok) {
+static Node *bitor_(Token **rest, Token *tok) {
   Node *node = bitxor(&tok, tok);
   while (equal(tok, "|")) {
     Token *start = tok;
@@ -2246,17 +2248,17 @@ static Node *bitor(Token **rest, Token *tok) {
 
 // bitxor = bitand ("^" bitand)*
 static Node *bitxor(Token **rest, Token *tok) {
-  Node *node = bitand(&tok, tok);
+  Node *node = bitand_(&tok, tok);
   while (equal(tok, "^")) {
     Token *start = tok;
-    node = new_binary(ND_BITXOR, node, bitand(&tok, tok->next), start);
+    node = new_binary(ND_BITXOR, node, bitand_(&tok, tok->next), start);
   }
   *rest = tok;
   return node;
 }
 
 // bitand = equality ("&" equality)*
-static Node *bitand(Token **rest, Token *tok) {
+static Node *bitand_(Token **rest, Token *tok) {
   Node *node = equality(&tok, tok);
   while (equal(tok, "&")) {
     Token *start = tok;
@@ -2466,7 +2468,7 @@ static Node *mul(Token **rest, Token *tok) {
 static Node *cast(Token **rest, Token *tok) {
   if (equal(tok, "(") && is_typename(tok->next)) {
     Token *start = tok;
-    Type *ty = typename(&tok, tok->next);
+    Type *ty = typename_(&tok, tok->next);
     tok = skip(tok, ")");
 
     // compound literal
@@ -2554,7 +2556,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
     // Anonymous struct member
     if ((basety->kind == TY_STRUCT || basety->kind == TY_UNION) &&
         consume(&tok, tok, ";")) {
-      Member *mem = calloc(1, sizeof(Member));
+      Member *mem = (Member *) calloc(1, sizeof(Member));
       mem->ty = basety;
       mem->idx = idx++;
       mem->align = attr.align ? attr.align : mem->ty->align;
@@ -2568,7 +2570,7 @@ static void struct_members(Token **rest, Token *tok, Type *ty) {
         tok = skip(tok, ",");
       first = false;
 
-      Member *mem = calloc(1, sizeof(Member));
+      Member *mem = (Member *) calloc(1, sizeof(Member));
       mem->ty = declarator(&tok, tok, basety);
       mem->name = mem->ty->name;
       mem->idx = idx++;
@@ -2662,7 +2664,7 @@ static Type *struct_union_decl(Token **rest, Token *tok) {
   if (tag) {
     // If this is a redefinition, overwrite a previous type.
     // Otherwise, register the struct type.
-    Type *ty2 = hashmap_get2(&scope->tags, tag->loc, tag->len);
+    Type *ty2 = (Type *) hashmap_get2(&scope->tags, tag->loc, tag->len);
     if (ty2) {
       *ty2 = *ty;
       return ty2;
@@ -2808,7 +2810,7 @@ static Node *postfix(Token **rest, Token *tok) {
   if (equal(tok, "(") && is_typename(tok->next)) {
     // Compound literal
     Token *start = tok;
-    Type *ty = typename(&tok, tok->next);
+    Type *ty = typename_(&tok, tok->next);
     tok = skip(tok, ")");
 
     if (scope->next == NULL) {
@@ -2955,7 +2957,7 @@ static Node *generic_selection(Token **rest, Token *tok) {
       continue;
     }
 
-    Type *t2 = typename(&tok, tok);
+    Type *t2 = typename_(&tok, tok);
     tok = skip(tok, ":");
     Node *node = assign(&tok, tok);
     if (is_compatible(t1, t2))
@@ -2998,7 +3000,7 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "sizeof") && equal(tok->next, "(") && is_typename(tok->next->next)) {
-    Type *ty = typename(&tok, tok->next->next);
+    Type *ty = typename_(&tok, tok->next->next);
     *rest = skip(tok, ")");
 
     if (ty->kind == TY_VLA) {
@@ -3022,7 +3024,7 @@ static Node *primary(Token **rest, Token *tok) {
   }
 
   if (equal(tok, "_Alignof") && equal(tok->next, "(") && is_typename(tok->next->next)) {
-    Type *ty = typename(&tok, tok->next->next);
+    Type *ty = typename_(&tok, tok->next->next);
     *rest = skip(tok, ")");
     return new_ulong(ty->align, tok);
   }
@@ -3038,16 +3040,16 @@ static Node *primary(Token **rest, Token *tok) {
 
   if (equal(tok, "__builtin_types_compatible_p")) {
     tok = skip(tok->next, "(");
-    Type *t1 = typename(&tok, tok);
+    Type *t1 = typename_(&tok, tok);
     tok = skip(tok, ",");
-    Type *t2 = typename(&tok, tok);
+    Type *t2 = typename_(&tok, tok);
     *rest = skip(tok, ")");
     return new_num(is_compatible(t1, t2), start);
   }
 
   if (equal(tok, "__builtin_reg_class")) {
     tok = skip(tok->next, "(");
-    Type *ty = typename(&tok, tok);
+    Type *ty = typename_(&tok, tok);
     *rest = skip(tok, ")");
 
     if (is_integer(ty) || ty->kind == TY_PTR)
@@ -3178,7 +3180,7 @@ static Obj *find_func(char *name) {
   while (sc->next)
     sc = sc->next;
 
-  VarScope *sc2 = hashmap_get(&sc->vars, name);
+  VarScope *sc2 = (VarScope *) hashmap_get(&sc->vars, name);
   if (sc2 && sc2->var && sc2->var->is_function)
     return sc2->var;
   return NULL;

@@ -84,7 +84,7 @@ static FileType parse_opt_x(char *s) {
 }
 
 static char *quote_makefile(char *s) {
-  char *buf = calloc(1, strlen(s) * 2 + 1);
+  char *buf = (char*) calloc(1, strlen(s) * 2 + 1);
 
   for (int i = 0, j = 0; s[i]; i++) {
     switch (s[i]) {
@@ -412,7 +412,7 @@ static void run_subprocess(char **argv) {
 }
 
 static void run_cc1(int argc, char **argv, char *input, char *output) {
-  char **args = calloc(argc + 10, sizeof(char *));
+  char **args = (char**) calloc(argc + 10, sizeof(char *));
   memcpy(args, argv, argc * sizeof(char *));
   args[argc++] = "-cc1";
 
@@ -431,7 +431,8 @@ static void run_cc1(int argc, char **argv, char *input, char *output) {
 
 // Print tokens to stdout. Used for -E.
 static void print_tokens(Token *tok) {
-  FILE *out = open_file(opt_o ? opt_o : "-");
+  // FILE *out = open_file(opt_o ? opt_o : "-");
+  FILE *out = opt_o ? open_file(opt_o) : open_file("-");
 
   int line = 1;
   for (; tok->kind != TK_EOF; tok = tok->next) {
@@ -785,7 +786,9 @@ int main(int argc, char **argv) {
     continue;
   }
 
-  if (ld_args.len > 0)
-    run_linker(&ld_args, opt_o ? opt_o : "a.out");
+  if (ld_args.len > 0) {
+    opt_o ? run_linker(&ld_args, opt_o) : run_linker(&ld_args, "a.out");
+    // run_linker(&ld_args, opt_o ? opt_o : "a.out");
+  }
   return 0;
 }

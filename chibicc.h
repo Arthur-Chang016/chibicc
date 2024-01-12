@@ -25,6 +25,8 @@
 # define __attribute__(x)
 #endif
 
+// #define noreturn [[noreturn]]
+
 typedef struct Type Type;
 typedef struct Node Node;
 typedef struct Member Member;
@@ -91,9 +93,9 @@ struct Token {
   Token *origin;    // If this is expanded from a macro, the original token
 };
 
-noreturn void error(char *fmt, ...) __attribute__((format(printf, 1, 2)));
-noreturn void error_at(char *loc, char *fmt, ...) __attribute__((format(printf, 2, 3)));
-noreturn void error_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3)));
+void error(char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void error_at(char *loc, char *fmt, ...) __attribute__((format(printf, 2, 3)));
+void error_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3)));
 void warn_tok(Token *tok, char *fmt, ...) __attribute__((format(printf, 2, 3)));
 bool equal(Token *tok, char *op);
 Token *skip(Token *tok, char *op);

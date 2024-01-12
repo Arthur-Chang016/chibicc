@@ -208,7 +208,7 @@ static void load(Type *ty) {
     return;
   }
 
-  char *insn = ty->is_unsigned ? "movz" : "movs";
+  const char *insn = ty->is_unsigned ? "movz" : "movs";
 
   // When we load a char or a short value to a register, we always
   // extend them to the size of int, so we can assume the lower half of
@@ -597,8 +597,8 @@ static void copy_ret_buffer(Obj *var) {
       else
         println("  movsd %%xmm%d, %d(%%rbp)", fp, var->offset + 8);
     } else {
-      char *reg1 = (gp == 0) ? "%al" : "%dl";
-      char *reg2 = (gp == 0) ? "%rax" : "%rdx";
+      const char *reg1 = (gp == 0) ? "%al" : "%dl";
+      const char *reg2 = (gp == 0) ? "%rax" : "%rdx";
       for (int i = 8; i < MIN(16, ty->size); i++) {
         println("  mov %s, %d(%%rbp)", reg1, var->offset + i);
         println("  shr $8, %s", reg2);
@@ -637,8 +637,8 @@ static void copy_struct_reg(void) {
       else
         println("  movsd 8(%%rdi), %%xmm%d", fp);
     } else {
-      char *reg1 = (gp == 0) ? "%al" : "%dl";
-      char *reg2 = (gp == 0) ? "%rax" : "%rdx";
+      const char *reg1 = (gp == 0) ? "%al" : "%dl";
+      const char *reg2 = (gp == 0) ? "%rax" : "%rdx";
       println("  mov $0, %s", reg2);
       for (int i = MIN(16, ty->size) - 1; i >= 8; i--) {
         println("  shl $8, %s", reg2);
@@ -897,26 +897,28 @@ static void gen_expr(Node *node) {
       switch (ty->kind) {
       case TY_STRUCT:
       case TY_UNION:
-        if (ty->size > 16)
-          continue;
+        {
+          if (ty->size > 16)
+            continue;
 
-        bool fp1 = has_flonum1(ty);
-        bool fp2 = has_flonum2(ty);
+          bool fp1 = has_flonum1(ty);
+          bool fp2 = has_flonum2(ty);
 
-        if (fp + fp1 + fp2 < FP_MAX && gp + !fp1 + !fp2 < GP_MAX) {
-          if (fp1)
-            popf(fp++);
-          else
-            pop(argreg64[gp++]);
-
-          if (ty->size > 8) {
-            if (fp2)
+          if (fp + fp1 + fp2 < FP_MAX && gp + !fp1 + !fp2 < GP_MAX) {
+            if (fp1)
               popf(fp++);
             else
               pop(argreg64[gp++]);
+
+            if (ty->size > 8) {
+              if (fp2)
+                popf(fp++);
+              else
+                pop(argreg64[gp++]);
+            }
           }
+          break;
         }
-        break;
       case TY_FLOAT:
       case TY_DOUBLE:
         if (fp < FP_MAX)
@@ -1010,7 +1012,7 @@ static void gen_expr(Node *node) {
     gen_expr(node->lhs);
     popf(1);
 
-    char *sz = (node->lhs->ty->kind == TY_FLOAT) ? "ss" : "sd";
+    const char *sz = (node->lhs->ty->kind == TY_FLOAT) ? "ss" : "sd";
 
     switch (node->kind) {
     case ND_ADD:
@@ -1235,8 +1237,8 @@ static void gen_stmt(Node *node) {
     gen_expr(node->cond);
 
     for (Node *n = node->case_next; n; n = n->case_next) {
-      char *ax = (node->cond->ty->size == 8) ? "%rax" : "%eax";
-      char *di = (node->cond->ty->size == 8) ? "%rdi" : "%edi";
+      const char *ax = (node->cond->ty->size == 8) ? "%rax" : "%eax";
+      const char *di = (node->cond->ty->size == 8) ? "%rdi" : "%edi";
 
       if (n->begin == n->end) {
         println("  cmp $%ld, %s", n->begin, ax);
